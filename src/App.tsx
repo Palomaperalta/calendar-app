@@ -1,20 +1,22 @@
 import { useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
+import interactionPlugin, { DateClickArg } from "@fullcalendar/interaction";
 import Modal from "react-modal";
 import { Controller, useForm } from "react-hook-form";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { EventClickArg } from "@fullcalendar/core/index.js";
 
 function App() {
   const [modalIsOpen, setIsOpen] = useState(false);
-  const [events, setEvents] = useState([
-    {
-      title: "Meeting",
-      start: new Date(),
-    },
-  ]);
+  const [events, setEvents] = useState(() => {
+    if (localStorage.getItem("eventKey")) {
+      return JSON.parse(localStorage.getItem("eventKey"));
+    } else {
+      return [];
+    }
+  });
 
   const {
     register,
@@ -24,31 +26,63 @@ function App() {
     reset,
   } = useForm();
 
-  function openModal(selectedDate?: any) {
+  function openModal({
+    dateTo,
+    dateFrom,
+    notes,
+    who,
+    title,
+    id,
+  }: {
+    dateTo?: Date;
+    dateFrom?: Date;
+    notes?: string;
+    who?: string;
+    title?: string;
+    id?: string;
+  }) {
     setIsOpen(true);
-    reset({ date: selectedDate });
+    reset({
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      notes: notes,
+      who: who,
+      thisTitle: title,
+    });
   }
 
   function closeModal() {
     setIsOpen(false);
   }
 
-  const handleDateClick = (arg) => {
-    openModal(arg.date);
+  const handleDateClick = (arg: DateClickArg) => {
+    openModal({ dateFrom: arg.date });
     console.log(arg);
+  };
+
+  const handleEventClick = (arg: EventClickArg) => {
+    console.log(arg);
+    openModal({
+      title: arg.event.title,
+      dateFrom: arg.event.start,
+      dateTo: arg.event.end,
+      notes: arg.event.extendedProps.notes,
+      who: arg.event.extendedProps.who,
+      id: arg.event.id,
+    });
   };
 
   return (
     <>
-      <div className="flex flex-col items-end gap-4 p-4 bg-rose-200 rounded">
+      <div className="flex flex-col items-start gap-4 bg-rose-200 rounded h-18">
         <button
-          onClick={() => openModal()}
-          className="block w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-4 focus:outline-none focus:ring-rose-300 font-medium rounded-lg text-sm mr-20 px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700 dark:focus:ring-rose-800"
+          onClick={() => openModal({})}
+          className="block w-fit m-4 text-white bg-rose-600 hover:bg-rose-800 focus:ring-2  focus:ring-rose-300 font-medium rounded-lg text-sm mr-20 px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700"
         >
           Visitas
         </button>
       </div>
-      <div>
+      <div className="h-full">
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
@@ -58,6 +92,7 @@ function App() {
           height={"auto"}
           selectable={true}
           dateClick={handleDateClick}
+          eventClick={handleEventClick}
         />
       </div>
       <Modal
@@ -81,35 +116,78 @@ function App() {
         }}
       >
         <div className="flex flex-col gap-4 w-full h-full p-4 bg-rose-200 rounded">
-          <button
-            onClick={closeModal}
-            className="block w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-4 focus:outline-none focus:ring-rose-300 font-medium rounded-lg text-sm mr-20 px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700 dark:focus:ring-rose-800"
-          >
-            Close
-          </button>
+          <div className="flex justify-end">
+            <button
+              onClick={closeModal}
+              className="flex w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-2  focus:ring-rose-300 font-medium rounded-lg text-sm px-5 m-2 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700"
+            >
+              Close
+            </button>
+          </div>
+
           <form
             className="flex flex-col gap-4"
             onSubmit={handleSubmit((data) => {
               setEvents([
                 ...events,
-                { title: data.firstName, start: data.date },
+                {
+                  id: events.length + 1,
+                  title: data.thisTitle,
+                  start: data.dateFrom,
+                  end: data.dateTo,
+                  extendedProps: {
+                    who: data.who,
+                    notes: data.notes,
+                  },
+                },
               ]);
               closeModal();
+              localStorage.setItem(
+                "eventKey",
+                JSON.stringify([
+                  ...events,
+                  {
+                    id: events.length + 1,
+                    title: data.thisTitle,
+                    start: data.dateFrom,
+                    end: data.dateTo,
+                    extendedProps: {
+                      who: data.who,
+                      notes: data.notes,
+                    },
+                  },
+                ])
+              );
             })}
           >
             <input
-              {...register("firstName")}
+              {...register("thisTitle")}
               className="bg-rose-300 focus:ring-2 focus:outline-none focus:ring-rose-800  text-gray-900 text-sm rounded-lg  p-2.5 placeholder-gray-900  max-w-sm"
-              placeholder="Name"
+              placeholder="Title"
             />
             <input
-              {...register("lastName", { required: true })}
+              {...register("who", { required: true })}
               className="bg-rose-300 focus:ring-2 focus:outline-none focus:ring-rose-800  text-gray-900 text-sm rounded-lg  p-2.5 placeholder-gray-900  max-w-sm"
-              placeholder="Lastname"
+              placeholder="Who is coming"
             />
-            {errors.lastName && <p>Last name is required.</p>}
+            {errors.who && <p>Who is coming is required.</p>}
             <Controller
-              name="date"
+              name="dateFrom"
+              control={control}
+              render={({ field }) => (
+                <DatePicker
+                  selected={field.value}
+                  onChange={field.onChange}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  name={field.name}
+                  dateFormat="dd/MM/yyyy"
+                  className="w-full bg-rose-300 border focus:ring-2 focus:outline-none border-rose-400 text-gray-900 text-sm rounded-lg focus:ring-rose-800 p-2.5 max-w-sm"
+                />
+              )}
+            />
+            <Controller
+              name="dateTo"
               control={control}
               render={({ field }) => (
                 <DatePicker
@@ -124,14 +202,25 @@ function App() {
               )}
             />
             <textarea
-              {...register("Note")}
+              {...register("notes")}
               className="bg-rose-300 border placeholder-gray-900 focus:ring-2 focus:outline-none border-rose-400 text-gray-900 text-sm rounded-lg focus:ring-rose-800 p-2.5 max-w-sm"
               placeholder="Notes"
             ></textarea>
-            <input
-              type="submit"
-              className="block w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-4 focus:outline-none focus:ring-rose-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700 dark:focus:ring-rose-800"
-            />
+
+            <div className="flex justify-around">
+              <button
+                type="submit"
+                className="flex  w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-2  focus:ring-rose-300 font-medium rounded-lg text-sm mr-20 px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700"
+              >
+                Aceptar
+              </button>
+              <button
+                onClick={closeModal}
+                className="flex  w-fit text-white bg-rose-600 hover:bg-rose-800 focus:ring-2  focus:ring-rose-300 font-medium rounded-lg text-sm mr-20 px-5 py-2.5 text-center dark:bg-rose-600 dark:hover:bg-rose-700"
+              >
+                Cancelar
+              </button>
+            </div>
           </form>
         </div>
       </Modal>
